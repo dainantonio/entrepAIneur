@@ -1,5 +1,5 @@
 {
   "name": "EntrepAIneur",
   "description": "AI operating system for informal entrepreneurs in Caribbean and Global South markets.",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["microphone"]
 }

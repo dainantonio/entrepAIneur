@@ -189,6 +189,11 @@ export default function App() {
 
       rec.onerror = (event: any) => {
         console.error("Speech recognition error", event.error);
+        if (event.error === 'not-allowed') {
+          alert("Microphone access was denied. Please enable it in your browser settings to use voice features.");
+        } else {
+          alert(`Speech recognition error: ${event.error}`);
+        }
         setIsListening(false);
       };
 
@@ -232,9 +237,11 @@ export default function App() {
       }));
       const response = await gemini.chatWithAI(chatInput, history);
       setChatMessages(prev => [...prev, { role: "model", text: response }]);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      setChatMessages(prev => [...prev, { role: "model", text: "Sorry, I ran into an error. Please try again later." }]);
+      const errorMsg = error.message || "Sorry, I ran into an error. Please try again later.";
+      setChatMessages(prev => [...prev, { role: "model", text: errorMsg }]);
+      alert(`Chat Error: ${errorMsg}`);
     } finally {
       setIsChatLoading(false);
       setIsTyping(false);
@@ -278,8 +285,9 @@ export default function App() {
     try {
       const result = await gemini.generateElevatorPitch(pitchInput.type, pitchInput.market);
       setPitchResult(result);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      alert(`Failed to generate pitch: ${error.message || "Unknown error"}`);
     } finally {
       setIsPitchLoading(false);
     }
@@ -291,8 +299,9 @@ export default function App() {
     try {
       const result = await gemini.explainProduct(activeProduct.name, productQuestion);
       setProductAnswer(result);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      alert(`Failed to explain product: ${error.message || "Unknown error"}`);
     } finally {
       setIsExplainerLoading(false);
     }
@@ -319,8 +328,9 @@ export default function App() {
         business: formData.business,
         productInterest: data.recommendedProduct
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      alert(`Failed to join waitlist: ${error.message || "Unknown error"}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -366,7 +376,7 @@ export default function App() {
       <Navbar />
       
       <main>
-        <section className="relative min-h-screen flex flex-col justify-center overflow-hidden pt-20">
+        <section className="relative min-h-screen flex flex-col justify-center overflow-hidden pt-32 pb-20">
           {/* Background Texture/Gradient */}
           <div className="absolute inset-0 z-0 opacity-20 pointer-events-none">
             <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,#CC7722_0%,transparent_50%)] opacity-30" />
@@ -432,7 +442,7 @@ export default function App() {
                 className="flex items-center gap-4 pt-8 border-t border-white/10 mt-4"
               >
                 <div className="flex -space-x-3">
-                  {['caribbean-man', 'caribbean-woman', 'trader-woman', 'builder-man'].map((seed, i) => (
+                  {['entrepreneur-1', 'entrepreneur-2', 'entrepreneur-3', 'entrepreneur-4'].map((seed, i) => (
                     <img 
                       key={i}
                       src={`https://picsum.photos/seed/${seed}/100/100`} 
@@ -460,9 +470,9 @@ export default function App() {
                 <div className="absolute inset-0 border-2 border-amber-custom/30 rounded-3xl translate-x-4 translate-y-4 -z-10" />
                 <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-2xl border border-white/10">
                   <img 
-                    src="https://picsum.photos/seed/caribbean-market-vendor/800/1000" 
+                    src="https://picsum.photos/seed/caribbean-business-owner/800/1000" 
                     alt="Entrepreneur at work" 
-                    className="w-full h-full object-cover grayscale-[0.2] contrast-125 brightness-90"
+                    className="w-full h-full object-cover grayscale-[0.1] contrast-110 brightness-105"
                     referrerPolicy="no-referrer"
                   />
                   {/* Overlay Gradient */}
@@ -584,6 +594,54 @@ export default function App() {
                 </div>
                 <h3 className="font-display font-bold text-2xl">Offline First</h3>
                 <p className="text-espresso/70">Spotty connection? No problem. EntrepAIneur works wherever you are.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* WhatsApp Integration Section */}
+        <section className="py-24 bg-espresso relative overflow-hidden">
+          <div className="max-w-7xl mx-auto px-6 md:px-12">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+              <motion.div
+                initial={{ opacity: 0, x: -30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                className="order-2 lg:order-1"
+              >
+                <div className="relative aspect-video rounded-3xl overflow-hidden shadow-2xl border border-white/10">
+                  <img 
+                    src="https://picsum.photos/seed/whatsapp-business/1200/800" 
+                    alt="WhatsApp Business Interface" 
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-r from-espresso/40 to-transparent" />
+                </div>
+              </motion.div>
+              <div className="order-1 lg:order-2">
+                <span className="text-amber-custom font-bold text-xs uppercase tracking-widest mb-4 block">Zero Learning Curve</span>
+                <h2 className="font-display text-4xl md:text-5xl font-bold mb-6 leading-tight">Your business, <br /><span className="text-amber-custom">inside WhatsApp.</span></h2>
+                <p className="text-cream/60 text-lg mb-8 leading-relaxed">
+                  No new apps to download. No complex dashboards. EntrepAIneur lives where you already are. 
+                  Send a voice note to track a sale. Snap a photo of a receipt to log an expense. 
+                  It's that simple.
+                </p>
+                <ul className="space-y-4">
+                  {[
+                    "Voice-to-inventory tracking",
+                    "Automated daily sales summaries",
+                    "Customer debt reminders",
+                    "Supplier price comparisons"
+                  ].map((item, i) => (
+                    <li key={i} className="flex items-center gap-3 text-cream/80">
+                      <div className="w-5 h-5 bg-amber-custom/20 rounded-full flex items-center justify-center text-amber-custom">
+                        <CheckCircle2 size={14} />
+                      </div>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
           </div>

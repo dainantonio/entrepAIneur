@@ -51,30 +51,44 @@ async function startServer() {
 
   app.use(express.json());
 
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+  console.log("Starting server...");
+
+  let aiInstance: GoogleGenAI | null = null;
+  const getAI = () => {
+    if (!aiInstance) {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("GEMINI_API_KEY is not set in the environment");
+      }
+      aiInstance = new GoogleGenAI({ apiKey });
+    }
+    return aiInstance;
+  };
 
   // API Routes
   app.post("/api/chat", async (req, res) => {
     try {
       const { message, history } = req.body;
+      const ai = getAI();
       const chat = ai.chats.create({
-        model: "gemini-2.5-flash",
+        model: "gemini-3-flash-preview",
         config: { systemInstruction: SYSTEM_INSTRUCTION },
         history: history || []
       });
       const response = await chat.sendMessage({ message });
       res.json({ text: response.text });
     } catch (error: any) {
-      console.error(error);
-      res.status(500).json({ error: error.message });
+      console.error("Chat Error:", error);
+      res.status(500).json({ error: error.message || "An error occurred during chat" });
     }
   });
 
   app.post("/api/waitlist-questions", async (req, res) => {
     try {
       const { businessDescription } = req.body;
+      const ai = getAI();
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3-flash-preview",
         contents: `The user just joined the waitlist for EntrepAIneur. 
         Business Description: "${businessDescription}"
         Based on this, ask 2-3 smart follow-up questions to understand their business type, market, and biggest pain point. 
@@ -103,40 +117,42 @@ async function startServer() {
       });
       res.json(JSON.parse(response.text));
     } catch (error: any) {
-      console.error(error);
-      res.status(500).json({ error: error.message });
+      console.error("Waitlist Questions Error:", error);
+      res.status(500).json({ error: error.message || "An error occurred generating questions" });
     }
   });
 
   app.post("/api/generate-pitch", async (req, res) => {
     try {
       const { businessType, market } = req.body;
+      const ai = getAI();
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3-flash-preview",
         contents: `Business Type: ${businessType}, Market: ${market}.
         Generate a one-paragraph elevator pitch written in the EntrepAIneur brand voice (professional, Caribbean-rooted, tech-forward).`,
         config: { systemInstruction: SYSTEM_INSTRUCTION }
       });
       res.json({ text: response.text });
     } catch (error: any) {
-      console.error(error);
-      res.status(500).json({ error: error.message });
+      console.error("Generate Pitch Error:", error);
+      res.status(500).json({ error: error.message || "An error occurred generating pitch" });
     }
   });
 
   app.post("/api/explain-product", async (req, res) => {
     try {
       const { productName, userQuestion } = req.body;
+      const ai = getAI();
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3-flash-preview",
         contents: `Product: ${productName}. User asks: "${userQuestion}"
         Explain how this product helps them in conversational language.`,
         config: { systemInstruction: SYSTEM_INSTRUCTION }
       });
       res.json({ text: response.text });
     } catch (error: any) {
-      console.error(error);
-      res.status(500).json({ error: error.message });
+      console.error("Explain Product Error:", error);
+      res.status(500).json({ error: error.message || "An error occurred explaining product" });
     }
   });
 
