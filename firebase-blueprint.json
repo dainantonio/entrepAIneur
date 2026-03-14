@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "waitlist": {
+      "title": "Waitlist Entry",
+      "description": "A user who has joined the waitlist for EntrepAIneur products.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The user's full name"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address"
+        },
+        "business": {
+          "type": "string",
+          "description": "Description of the user's business"
+        },
+        "market": {
+          "type": "string",
+          "description": "The market or location of the business"
+        },
+        "productInterest": {
+          "type": "string",
+          "description": "The EntrepAIneur product they are interested in"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the user joined the waitlist"
+        }
+      },
+      "required": ["name", "email", "business", "createdAt"]
+    }
+  },
+  "firestore": {
+    "waitlist": {
+      "schema": "waitlist",
+      "description": "Collection of waitlist signups"
+    }
+  }
+}

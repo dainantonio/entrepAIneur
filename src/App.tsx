@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { ArrowRight, Menu, X, Play, Mic, Waves, CheckCircle2, AlertCircle, MessageSquare, Sparkles, Send, Loader2 } from "lucide-react";
 import { useState, useEffect, ChangeEvent, useRef, FormEvent } from "react";
 import * as gemini from "./services/geminiService";
+import { joinWaitlist } from "./firebase";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -149,8 +150,6 @@ export default function App() {
   ]);
   const [chatInput, setChatInput] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
-  const [chatApiKey, setChatApiKey] = useState("");
-  const [isKeySet, setIsKeySet] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
 
   const [pitchInput, setPitchInput] = useState({ type: '', market: '' });
@@ -170,9 +169,55 @@ export default function App() {
     }
   }, [chatMessages]);
 
+  // Speech Recognition
+  const [recognition, setRecognition] = useState<any>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const rec = new SpeechRecognition();
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.lang = 'en-US';
+
+      rec.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setChatInput(transcript);
+        setIsChatOpen(true);
+        setIsListening(false);
+      };
+
+      rec.onerror = (event: any) => {
+        console.error("Speech recognition error", event.error);
+        setIsListening(false);
+      };
+
+      rec.onend = () => {
+        setIsListening(false);
+      };
+
+      setRecognition(rec);
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (!recognition) {
+      alert("Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    if (isListening) {
+      recognition.stop();
+      setIsListening(false);
+    } else {
+      recognition.start();
+      setIsListening(true);
+    }
+  };
+
   const handleChatSubmit = async (e?: FormEvent) => {
     if (e) e.preventDefault();
-    if (!chatInput.trim() || isChatLoading || !isKeySet) return;
+    if (!chatInput.trim() || isChatLoading) return;
 
     const userMsg = { role: "user", text: chatInput };
     setChatMessages(prev => [...prev, userMsg]);
@@ -185,20 +230,14 @@ export default function App() {
         role: m.role === "user" ? "user" : "model",
         parts: [{ text: m.text }]
       }));
-      const response = await gemini.chatWithAI(chatInput, history, chatApiKey);
+      const response = await gemini.chatWithAI(chatInput, history);
       setChatMessages(prev => [...prev, { role: "model", text: response }]);
     } catch (error) {
       console.error(error);
-      setChatMessages(prev => [...prev, { role: "model", text: "Sorry, I ran into an error. Please check your API key and try again." }]);
+      setChatMessages(prev => [...prev, { role: "model", text: "Sorry, I ran into an error. Please try again later." }]);
     } finally {
       setIsChatLoading(false);
       setIsTyping(false);
-    }
-  };
-
-  const handleSetKey = () => {
-    if (chatApiKey.trim()) {
-      setIsKeySet(true);
     }
   };
 
@@ -272,6 +311,14 @@ export default function App() {
       setQualifierData(data);
       setQualifierAnswers(new Array(data.questions.length).fill(""));
       setShowQualifier(true);
+      
+      // Save to Firebase
+      await joinWaitlist({
+        name: formData.name,
+        email: formData.email,
+        business: formData.business,
+        productInterest: data.recommendedProduct
+      });
     } catch (error) {
       console.error(error);
     } finally {
@@ -366,10 +413,15 @@ export default function App() {
                   <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity" />
                 </button>
                 
-                <button className="group border border-cream/20 hover:border-cream/40 px-8 py-4 rounded-full font-bold text-lg flex items-center justify-center gap-2 transition-all hover:bg-white/5 active:scale-95">
-                  <Play size={18} className="fill-cream" />
-                  <span>See how it works</span>
-                </button>
+                <a 
+                  href="https://wa.me/1234567890" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="group border border-[#25D366]/40 hover:border-[#25D366] px-8 py-4 rounded-full font-bold text-lg flex items-center justify-center gap-2 transition-all hover:bg-[#25D366]/10 active:scale-95 text-white"
+                >
+                  <MessageSquare size={18} className="text-[#25D366]" />
+                  <span>WhatsApp Us</span>
+                </a>
               </motion.div>
 
               {/* Trust Indicators */}
@@ -380,10 +432,10 @@ export default function App() {
                 className="flex items-center gap-4 pt-8 border-t border-white/10 mt-4"
               >
                 <div className="flex -space-x-3">
-                  {[1, 2, 3, 4].map((i) => (
+                  {['caribbean-man', 'caribbean-woman', 'trader-woman', 'builder-man'].map((seed, i) => (
                     <img 
                       key={i}
-                      src={`https://picsum.photos/seed/person${i}/100/100`} 
+                      src={`https://picsum.photos/seed/${seed}/100/100`} 
                       alt="User" 
                       className="w-10 h-10 rounded-full border-2 border-espresso object-cover"
                       referrerPolicy="no-referrer"
@@ -408,7 +460,7 @@ export default function App() {
                 <div className="absolute inset-0 border-2 border-amber-custom/30 rounded-3xl translate-x-4 translate-y-4 -z-10" />
                 <div className="relative h-full w-full overflow-hidden rounded-3xl shadow-2xl border border-white/10">
                   <img 
-                    src="https://picsum.photos/seed/entrepreneur-market/800/1000" 
+                    src="https://picsum.photos/seed/caribbean-market-vendor/800/1000" 
                     alt="Entrepreneur at work" 
                     className="w-full h-full object-cover grayscale-[0.2] contrast-125 brightness-90"
                     referrerPolicy="no-referrer"
@@ -458,7 +510,7 @@ export default function App() {
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
-              onClick={() => setIsListening(!isListening)}
+              onClick={toggleListening}
               className={`relative w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(242,169,0,0.3)] transition-colors duration-500 ${
                 isListening ? 'bg-white text-ochre' : 'bg-amber-custom text-espresso'
               }`}
@@ -1054,39 +1106,18 @@ export default function App() {
                   <div ref={chatEndRef} />
                 </div>
 
-                {!isKeySet && (
-                  <div className="px-4 py-3 bg-amber-custom/10 border-t border-amber-custom/20">
-                    <p className="text-[10px] text-amber-custom font-bold uppercase tracking-widest mb-2">Gemini API Key Required</p>
-                    <div className="flex gap-2">
-                      <input 
-                        type="password" 
-                        placeholder="Paste API Key..."
-                        value={chatApiKey}
-                        onChange={(e) => setChatApiKey(e.target.value)}
-                        className="flex-1 bg-espresso border border-amber-custom/30 rounded-lg px-3 py-1.5 text-xs text-cream focus:outline-none focus:border-amber-custom"
-                      />
-                      <button 
-                        onClick={handleSetKey}
-                        className="bg-amber-custom text-espresso text-[10px] font-bold px-3 py-1.5 rounded-lg hover:bg-white transition-colors"
-                      >
-                        Set Key
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 <form onSubmit={handleChatSubmit} className="p-4 bg-white/5 border-t border-white/10 flex gap-2">
                   <input 
                     type="text" 
-                    placeholder={isKeySet ? "Ask anything..." : "Set API key to chat"}
+                    placeholder="Ask anything..."
                     value={chatInput}
-                    disabled={!isKeySet || isChatLoading}
+                    disabled={isChatLoading}
                     onChange={(e) => setChatInput(e.target.value)}
                     className="flex-1 bg-espresso border border-white/10 rounded-xl px-4 py-2 text-sm text-cream focus:outline-none focus:border-amber-custom disabled:opacity-50"
                   />
                   <button 
                     type="submit"
-                    disabled={isChatLoading || !chatInput.trim() || !isKeySet}
+                    disabled={isChatLoading || !chatInput.trim()}
                     className="bg-amber-custom text-espresso p-2 rounded-xl hover:scale-105 transition-all disabled:opacity-50"
                   >
                     <Send size={18} />

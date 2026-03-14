@@ -1,0 +1,56 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: waitlist
+// Fields:
+//   - name: string (required)
+//   - email: string (required, email format)
+//   - business: string (required)
+//   - market: string (optional)
+//   - productInterest: string (optional)
+//   - createdAt: timestamp (required)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidWaitlistEntry(data) {
+      return data.keys().hasAll(['name', 'email', 'business', 'createdAt']) &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+             isValidEmail(data.email) &&
+             data.business is string && data.business.size() >= 10 && data.business.size() <= 1000 &&
+             data.createdAt is timestamp &&
+             (!('market' in data) || (data.market is string && data.market.size() <= 100)) &&
+             (!('productInterest' in data) || (data.productInterest is string && data.productInterest.size() <= 50));
+    }
+
+    // Waitlist collection
+    match /waitlist/{entryId} {
+      // Anyone can join the waitlist (create)
+      allow create: if isValidWaitlistEntry(request.resource.data);
+      
+      // Only admins can read or manage the waitlist
+      allow read, update, delete: if isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "dain.russell@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    // User profiles (for admin checks)
+    match /users/{userId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if false; // Managed via admin console or specific logic
+    }
+  }
+}
