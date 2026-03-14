@@ -11,48 +11,115 @@ import * as gemini from "./services/geminiService";
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
 
+  // Lock body scroll when menu is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   return (
-    <nav className="fixed top-0 left-0 w-full z-50 px-6 py-6 md:px-12">
-      <div className="max-w-7xl mx-auto flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-amber-custom rounded-sm flex items-center justify-center">
-            <span className="text-espresso font-display font-extrabold text-xl">E</span>
+    <nav className="fixed top-0 left-0 w-full z-50">
+      {/* Main Navbar Bar */}
+      <div className="relative z-50 px-6 py-6 md:px-12 bg-espresso/80 backdrop-blur-md border-b border-white/5">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-amber-custom rounded-sm flex items-center justify-center">
+              <span className="text-espresso font-display font-extrabold text-xl">E</span>
+            </div>
+            <span className="font-display font-bold text-2xl tracking-tight text-cream">
+              Entrep<span className="text-amber-custom italic">AI</span>neur
+            </span>
           </div>
-          <span className="font-display font-bold text-2xl tracking-tight text-cream">
-            Entrep<span className="text-amber-custom italic">AI</span>neur
-          </span>
-        </div>
 
-        {/* Desktop Nav */}
-        <div className="hidden md:flex items-center gap-8">
-          <a href="#products" className="text-sm font-medium hover:text-amber-custom transition-colors">Products</a>
-          <a href="#about" className="text-sm font-medium hover:text-amber-custom transition-colors">About</a>
-          <a 
-            href="#waitlist" 
-            className="bg-cream text-espresso px-5 py-2 rounded-full text-sm font-bold hover:bg-amber-custom transition-all duration-300"
+          {/* Desktop Nav */}
+          <div className="hidden md:flex items-center gap-8">
+            <a href="#products" className="text-sm font-medium hover:text-amber-custom transition-colors">Products</a>
+            <a href="#about" className="text-sm font-medium hover:text-amber-custom transition-colors">About</a>
+            <a 
+              href="#waitlist" 
+              className="bg-cream text-espresso px-5 py-2 rounded-full text-sm font-bold hover:bg-amber-custom transition-all duration-300"
+            >
+              Waitlist
+            </a>
+          </div>
+
+          {/* Mobile Menu Toggle */}
+          <button 
+            className="md:hidden text-cream p-2 -mr-2 z-50" 
+            onClick={() => setIsOpen(!isOpen)}
+            aria-label="Toggle menu"
           >
-            Waitlist
-          </a>
+            {isOpen ? <X size={28} /> : <Menu size={28} />}
+          </button>
         </div>
-
-        {/* Mobile Menu Toggle */}
-        <button className="md:hidden text-cream" onClick={() => setIsOpen(!isOpen)}>
-          {isOpen ? <X size={28} /> : <Menu size={28} />}
-        </button>
       </div>
 
-      {/* Mobile Nav Overlay */}
-      {isOpen && (
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-full left-0 w-full bg-espresso border-b border-white/10 p-6 flex flex-col gap-6 md:hidden"
-        >
-          <a href="#products" className="text-xl font-display font-medium" onClick={() => setIsOpen(false)}>Products</a>
-          <a href="#about" className="text-xl font-display font-medium" onClick={() => setIsOpen(false)}>About</a>
-          <a href="#waitlist" className="text-xl font-display font-medium text-amber-custom" onClick={() => setIsOpen(false)}>Join Waitlist</a>
-        </motion.div>
-      )}
+      {/* Mobile Nav Overlay & Menu */}
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            {/* Backdrop Overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsOpen(false)}
+              className="fixed inset-0 bg-espresso/90 backdrop-blur-sm z-40 md:hidden"
+            />
+            
+            {/* Slide-down Menu */}
+            <motion.div 
+              initial={{ y: "-100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "-100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed top-0 left-0 w-full bg-espresso border-b border-white/10 pt-24 pb-12 px-6 z-40 md:hidden shadow-2xl"
+            >
+              <div className="flex flex-col gap-8">
+                <a 
+                  href="#products" 
+                  className="text-3xl font-display font-bold text-cream hover:text-amber-custom transition-colors" 
+                  onClick={() => setIsOpen(false)}
+                >
+                  Products
+                </a>
+                <a 
+                  href="#about" 
+                  className="text-3xl font-display font-bold text-cream hover:text-amber-custom transition-colors" 
+                  onClick={() => setIsOpen(false)}
+                >
+                  About
+                </a>
+                <a 
+                  href="#waitlist" 
+                  className="text-3xl font-display font-bold text-amber-custom" 
+                  onClick={() => setIsOpen(false)}
+                >
+                  Join Waitlist
+                </a>
+                
+                <div className="mt-8 pt-8 border-t border-white/10">
+                  <p className="text-sm text-cream/50 font-medium mb-4 uppercase tracking-widest">Connect with us</p>
+                  <div className="flex gap-6">
+                    <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-cream hover:bg-amber-custom hover:text-espresso transition-all">
+                      <Send size={18} />
+                    </div>
+                    <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-cream hover:bg-amber-custom hover:text-espresso transition-all">
+                      <MessageSquare size={18} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </nav>
   );
 };
@@ -271,9 +338,9 @@ export default function App() {
                 <span className="inline-block px-3 py-1 bg-ochre/20 border border-ochre/30 text-ochre text-xs font-bold uppercase tracking-widest rounded-md mb-6">
                   Now in Private Beta
                 </span>
-                <h1 className="font-display text-5xl md:text-7xl lg:text-8xl font-extrabold leading-[0.9] tracking-tighter text-balance">
+                <h1 className="font-display text-5xl md:text-7xl lg:text-8xl font-extrabold leading-[1.1] tracking-tighter text-balance">
                   The AI built for <br />
-                  <span className="text-amber-custom italic font-serif font-medium">how you actually</span> work
+                  <span className="text-amber-custom italic font-serif font-medium inline-block py-1">how you actually</span> work
                 </h1>
               </motion.div>
 
