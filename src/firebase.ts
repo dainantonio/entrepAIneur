@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, serverTimestamp, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -70,5 +70,111 @@ export const joinWaitlist = async (data: { name: string, email: string, business
     return docRef.id;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, path);
+  }
+};
+
+export const getPosts = async () => {
+  const path = 'posts';
+  try {
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'), limit(10));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+  }
+};
+
+export const addPost = async (data: any) => {
+  const path = 'posts';
+  try {
+    const docRef = await addDoc(collection(db, path), {
+      ...data,
+      createdAt: serverTimestamp()
+    });
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+};
+
+export const getFeeds = async () => {
+  const path = 'feeds';
+  try {
+    const snapshot = await getDocs(collection(db, path));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+  }
+};
+
+export const addFeed = async (data: { url: string, name: string }) => {
+  const path = 'feeds';
+  try {
+    const docRef = await addDoc(collection(db, path), {
+      ...data,
+      createdAt: serverTimestamp()
+    });
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+};
+
+export const getToolkit = async () => {
+  const path = 'toolkit';
+  try {
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+  }
+};
+
+export const addToolkitItem = async (data: any) => {
+  const path = 'toolkit';
+  try {
+    const docRef = await addDoc(collection(db, path), {
+      ...data,
+      createdAt: serverTimestamp()
+    });
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+};
+
+export const getMarketIntel = async () => {
+  const path = 'market_intel';
+  try {
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+  }
+};
+
+export const addMarketIntel = async (data: any) => {
+  const path = 'market_intel';
+  try {
+    const docRef = await addDoc(collection(db, path), {
+      ...data,
+      createdAt: serverTimestamp()
+    });
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+};
+
+export const getWaitlist = async () => {
+  const path = 'waitlist';
+  try {
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
   }
 };

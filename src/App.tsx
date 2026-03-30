@@ -4,15 +4,248 @@
  */
 
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowRight, Menu, X, Play, Mic, Waves, CheckCircle2, AlertCircle, MessageSquare, Sparkles, Send, Loader2, LogOut, User as UserIcon } from "lucide-react";
-import { useState, useEffect, ChangeEvent, useRef, FormEvent } from "react";
+import { ArrowRight, Menu, X, Play, Mic, Waves, CheckCircle2, AlertCircle, MessageSquare, Sparkles, Send, Loader2, LogOut, User as UserIcon, Plus, ExternalLink, Globe, MapPin, ShieldCheck, LayoutDashboard, Database, FileText, Settings, ChevronRight, Download, BookOpen } from "lucide-react";
+import { useState, useEffect, ChangeEvent, useRef, FormEvent, useMemo } from "react";
 import * as gemini from "./services/geminiService";
-import { joinWaitlist, auth, db, googleProvider } from "./firebase";
+import { joinWaitlist, auth, db, googleProvider, getPosts, addPost, getFeeds, addFeed, getToolkit, addToolkitItem, getMarketIntel, addMarketIntel, getWaitlist } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut, User } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { OnboardingFlow } from "./components/OnboardingFlow";
+import ReactMarkdown from 'react-markdown';
+import * as d3 from 'd3';
 
-const Navbar = ({ user, onLogin, onLogout }: { user: User | null, onLogin: () => void, onLogout: () => void }) => {
+const MarketMap = ({ data }: { data: any[] }) => {
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    if (!svgRef.current || !data.length) return;
+
+    const svg = d3.select(svgRef.current);
+    svg.selectAll("*").remove();
+
+    const width = 800;
+    const height = 400;
+    
+    // Simple projection for Tri-state and Jamaica
+    // This is a mock visualization since we don't have real geojson for these specific local areas easily
+    // We'll use a bubble chart style map
+    
+    const simulation = d3.forceSimulation(data)
+      .force("x", d3.forceX(width / 2).strength(0.05))
+      .force("y", d3.forceY(height / 2).strength(0.05))
+      .force("collide", d3.forceCollide(60));
+
+    const g = svg.append("g");
+
+    const nodes = g.selectAll(".node")
+      .data(data)
+      .enter()
+      .append("g")
+      .attr("class", "node")
+      .call(d3.drag<any, any>()
+        .on("start", (event, d) => {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        })
+        .on("drag", (event, d) => {
+          d.fx = event.x;
+          d.fy = event.y;
+        })
+        .on("end", (event, d) => {
+          if (!event.active) simulation.alphaTarget(0);
+          d.fx = null;
+          d.fy = null;
+        }));
+
+    nodes.append("circle")
+      .attr("r", 50)
+      .attr("fill", d => d.region === 'Jamaica' ? '#009b3a' : '#ffb800')
+      .attr("fill-opacity", 0.2)
+      .attr("stroke", d => d.region === 'Jamaica' ? '#fed100' : '#2d1b14')
+      .attr("stroke-width", 2);
+
+    nodes.append("text")
+      .attr("text-anchor", "middle")
+      .attr("dy", ".3em")
+      .attr("fill", "#f5f2ed")
+      .attr("font-size", "10px")
+      .attr("font-weight", "bold")
+      .text(d => d.title);
+
+    simulation.on("tick", () => {
+      nodes.attr("transform", d => `translate(${d.x},${d.y})`);
+    });
+
+  }, [data]);
+
+  return (
+    <div className="relative w-full aspect-[2/1] bg-espresso/40 rounded-xl border border-white/5 overflow-hidden">
+      <div className="absolute top-4 left-4 z-10">
+        <h4 className="text-xs font-bold uppercase tracking-widest text-amber-custom mb-1">Market Intelligence</h4>
+        <p className="text-[10px] text-cream/40">Interactive Signal Map: Tri-State & Jamaica</p>
+      </div>
+      <svg ref={svgRef} viewBox="0 0 800 400" className="w-full h-full" />
+      <div className="absolute bottom-4 right-4 flex gap-4">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-amber-custom" />
+          <span className="text-[10px] text-cream/60">US Tri-State</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-[#009b3a]" />
+          <span className="text-[10px] text-cream/60">Jamaica</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ToolkitCard = ({ item, isAdmin }: { item: any, isAdmin: boolean }) => (
+  <motion.div 
+    whileHover={{ y: -5 }}
+    className="bg-espresso/40 p-6 rounded-xl border border-white/5 hover:border-amber-custom/30 transition-all group"
+  >
+    <div className="flex justify-between items-start mb-4">
+      <span className="text-[10px] font-bold uppercase tracking-tighter px-2 py-1 bg-amber-custom/10 text-amber-custom rounded">
+        {item.type}
+      </span>
+      <Download size={16} className="text-cream/20 group-hover:text-amber-custom transition-colors cursor-pointer" />
+    </div>
+    <h3 className="text-lg font-display font-bold text-cream mb-2">{item.title}</h3>
+    <p className="text-sm text-cream/60 mb-4 line-clamp-2">{item.description}</p>
+    <button className="text-xs font-bold text-amber-custom flex items-center gap-2 group-hover:gap-3 transition-all">
+      ACCESS RESOURCE <ArrowRight size={14} />
+    </button>
+  </motion.div>
+);
+
+const SignalToStartup = ({ onAnalyze, isLoading, analysis }: { onAnalyze: (e: any) => void, isLoading: boolean, analysis: any }) => (
+  <div className="bg-espresso/60 p-8 rounded-2xl border border-white/10">
+    <div className="flex items-center gap-3 mb-6">
+      <div className="p-2 bg-amber-custom/20 rounded-lg">
+        <Sparkles className="text-amber-custom" size={24} />
+      </div>
+      <div>
+        <h3 className="text-xl font-display font-bold text-cream">Signal to Startup</h3>
+        <p className="text-sm text-cream/40">AI-powered market opportunity analysis</p>
+      </div>
+    </div>
+
+    <form onSubmit={onAnalyze} className="space-y-4 mb-8">
+      <div className="relative">
+        <textarea 
+          placeholder="Paste a news headline, policy link, or market observation..."
+          className="w-full bg-espresso border border-white/10 rounded-xl p-4 text-sm text-cream placeholder:text-cream/20 focus:border-amber-custom outline-none transition-all min-h-[120px]"
+          name="signal"
+        />
+      </div>
+      <button 
+        type="submit"
+        disabled={isLoading}
+        className="w-full bg-amber-custom text-espresso font-bold py-3 rounded-xl hover:bg-cream transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+      >
+        {isLoading ? <Loader2 className="animate-spin" size={20} /> : <><Sparkles size={18} /> ANALYZE SIGNAL</>}
+      </button>
+    </form>
+
+    <AnimatePresence>
+      {analysis && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+              <h4 className="text-xs font-bold text-amber-custom uppercase tracking-widest mb-2">The Signal</h4>
+              <p className="text-sm text-cream/80">{analysis.signal}</p>
+            </div>
+            <div className="p-4 bg-amber-custom/10 rounded-xl border border-amber-custom/20">
+              <h4 className="text-xs font-bold text-amber-custom uppercase tracking-widest mb-2">The Opportunity</h4>
+              <p className="text-sm text-cream/80">{analysis.opportunity}</p>
+            </div>
+            <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+              <h4 className="text-xs font-bold text-amber-custom uppercase tracking-widest mb-2">The First Step</h4>
+              <p className="text-sm text-cream/80">{analysis.firstStep}</p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  </div>
+);
+
+const AdminDashboard = ({ waitlist, onClose }: { waitlist: any[], onClose: () => void }) => (
+  <motion.div 
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-espresso/95 backdrop-blur-xl"
+  >
+    <div className="w-full max-w-5xl bg-espresso border border-white/10 rounded-3xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+        <div className="flex items-center gap-3">
+          <LayoutDashboard className="text-amber-custom" />
+          <h2 className="text-2xl font-display font-bold text-cream">Founder's Dashboard</h2>
+        </div>
+        <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+          <X size={24} />
+        </button>
+      </div>
+      
+      <div className="flex-1 overflow-y-auto p-8">
+        <div className="grid md:grid-cols-4 gap-6 mb-12">
+          <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+            <p className="text-xs font-bold text-cream/40 uppercase tracking-widest mb-1">Waitlist Total</p>
+            <p className="text-3xl font-display font-bold text-amber-custom">{waitlist.length}</p>
+          </div>
+          <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+            <p className="text-xs font-bold text-cream/40 uppercase tracking-widest mb-1">Active Ventures</p>
+            <p className="text-3xl font-display font-bold text-amber-custom">3</p>
+          </div>
+          <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+            <p className="text-xs font-bold text-cream/40 uppercase tracking-widest mb-1">Toolkit Items</p>
+            <p className="text-3xl font-display font-bold text-amber-custom">12</p>
+          </div>
+          <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+            <p className="text-xs font-bold text-cream/40 uppercase tracking-widest mb-1">Market Signals</p>
+            <p className="text-3xl font-display font-bold text-amber-custom">48</p>
+          </div>
+        </div>
+
+        <h3 className="text-lg font-display font-bold text-cream mb-6 flex items-center gap-2">
+          <UserIcon size={20} className="text-amber-custom" /> Recent Waitlist Signups
+        </h3>
+        
+        <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-white/5 text-cream/40 uppercase text-[10px] font-bold tracking-widest">
+              <tr>
+                <th className="px-6 py-4">Name</th>
+                <th className="px-6 py-4">Email</th>
+                <th className="px-6 py-4">Business</th>
+                <th className="px-6 py-4">Market</th>
+                <th className="px-6 py-4">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {waitlist.map((entry, i) => (
+                <tr key={i} className="hover:bg-white/5 transition-colors">
+                  <td className="px-6 py-4 font-medium text-cream">{entry.name}</td>
+                  <td className="px-6 py-4 text-cream/60">{entry.email}</td>
+                  <td className="px-6 py-4 text-cream/60">{entry.business}</td>
+                  <td className="px-6 py-4 text-cream/60">{entry.market || 'N/A'}</td>
+                  <td className="px-6 py-4 text-cream/40">{entry.createdAt?.toDate().toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </motion.div>
+);
+const Navbar = ({ user, onLogin, onLogout, isAdmin, setShowAdminDashboard }: { user: User | null, onLogin: () => void, onLogout: () => void, isAdmin: boolean, setShowAdminDashboard: (show: boolean) => void }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   // Lock body scroll when menu is open
@@ -46,6 +279,16 @@ const Navbar = ({ user, onLogin, onLogout }: { user: User | null, onLogin: () =>
             <a href="#ventures" className="text-sm font-medium hover:text-amber-custom transition-colors">Ventures</a>
             <a href="#insights" className="text-sm font-medium hover:text-amber-custom transition-colors">Insights</a>
             <a href="#about" className="text-sm font-medium hover:text-amber-custom transition-colors">About</a>
+            {isAdmin && (
+              <button 
+                onClick={() => setShowAdminDashboard(true)}
+                className="text-amber-custom hover:text-cream transition-colors flex items-center gap-2"
+                title="Admin Dashboard"
+              >
+                <LayoutDashboard size={18} />
+                <span className="text-xs font-bold uppercase tracking-widest">Admin</span>
+              </button>
+            )}
             {user ? (
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
@@ -189,17 +432,54 @@ const Navbar = ({ user, onLogin, onLogout }: { user: User | null, onLogin: () =>
   );
 };
 
+interface Feed {
+  id: string;
+  url: string;
+  name: string;
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
+  const [posts, setPosts] = useState<any[]>([]);
+  const [feeds, setFeeds] = useState<any[]>([]);
+  const [rssItems, setRssItems] = useState<any[]>([]);
+  const [isInsightsLoading, setIsInsightsLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showPostForm, setShowPostForm] = useState(false);
+  const [showFeedForm, setShowFeedForm] = useState(false);
+  const [newPost, setNewPost] = useState({ title: '', content: '', excerpt: '', author: 'Dain Russell', image: '', tags: [] });
+  const [newFeed, setNewFeed] = useState({ url: '', name: '' });
+  const [selectedPost, setSelectedPost] = useState<any>(null);
+
+  // Phase 1: Toolkit States
+  const [toolkitItems, setToolkitItems] = useState<any[]>([]);
+  const [showToolkitForm, setShowToolkitForm] = useState(false);
+  const [newToolkitItem, setNewToolkitItem] = useState({ title: '', description: '', type: 'Prompt', content: '' });
+
+  // Phase 3: Market Intel States
+  const [marketIntel, setMarketIntel] = useState<any[]>([]);
+  const [showIntelForm, setShowIntelForm] = useState(false);
+  const [newIntel, setNewIntel] = useState({ region: 'Tri-state', title: '', description: '', coordinates: { lat: 38.4192, lng: -82.4452 } });
+
+  // Phase 4: Admin Dashboard States
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false);
+  const [waitlistEntries, setWaitlistEntries] = useState<any[]>([]);
+
+  // Phase 5: Signal to Startup States
+  const [signalInput, setSignalInput] = useState("");
+  const [signalAnalysis, setSignalAnalysis] = useState<any>(null);
+  const [isSignalLoading, setIsSignalLoading] = useState(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       setIsAuthReady(true);
       if (currentUser) {
+        setIsAdmin(currentUser.email === "dain.russell@gmail.com");
         const docRef = doc(db, 'profiles', currentUser.uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
@@ -211,10 +491,61 @@ export default function App() {
       } else {
         setProfile(null);
         setShowOnboarding(false);
+        setIsAdmin(false);
       }
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const fetchInsights = async () => {
+      setIsInsightsLoading(true);
+      try {
+        const fetchedPosts = await getPosts();
+        if (fetchedPosts) setPosts(fetchedPosts);
+
+        const fetchedFeeds = await getFeeds() as Feed[] | undefined;
+        if (fetchedFeeds) {
+          setFeeds(fetchedFeeds);
+          const allRssItems: any[] = [];
+          for (const feed of fetchedFeeds) {
+            try {
+              const response = await fetch(`/api/rss?url=${encodeURIComponent(feed.url)}`);
+              if (response.ok) {
+                const data = await response.json();
+                const items = data.items.slice(0, 3).map((item: any) => ({
+                  ...item,
+                  feedName: feed.name,
+                  type: 'rss'
+                }));
+                allRssItems.push(...items);
+              }
+            } catch (err) {
+              console.error(`Failed to fetch RSS for ${feed.name}:`, err);
+            }
+          }
+          setRssItems(allRssItems);
+        }
+
+        const fetchedToolkit = await getToolkit();
+        if (fetchedToolkit) setToolkitItems(fetchedToolkit);
+
+        const fetchedIntel = await getMarketIntel();
+        if (fetchedIntel) setMarketIntel(fetchedIntel);
+
+        if (isAdmin) {
+          const fetchedWaitlist = await getWaitlist();
+          if (fetchedWaitlist) setWaitlistEntries(fetchedWaitlist);
+        }
+      } catch (error) {
+        console.error("Error fetching insights:", error);
+      } finally {
+        setIsInsightsLoading(false);
+      }
+    };
+
+    fetchInsights();
+  }, [isAdmin]);
 
   const handleLogin = async () => {
     try {
@@ -229,6 +560,85 @@ export default function App() {
       await signOut(auth);
     } catch (error) {
       console.error("Logout failed", error);
+    }
+  };
+
+  const handlePostSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    try {
+      await addPost(newPost);
+      setShowPostForm(false);
+      setNewPost({ title: '', content: '', excerpt: '', author: 'Dain Russell', image: '', tags: [] });
+      // Refresh posts
+      const fetchedPosts = await getPosts();
+      if (fetchedPosts) setPosts(fetchedPosts);
+    } catch (error) {
+      console.error("Failed to add post", error);
+    }
+  };
+
+  const handleFeedSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    try {
+      await addFeed(newFeed);
+      setShowFeedForm(false);
+      setNewFeed({ url: '', name: '' });
+      // Refresh feeds
+      const fetchedFeeds = await getFeeds();
+      if (fetchedFeeds) setFeeds(fetchedFeeds);
+    } catch (error) {
+      console.error("Failed to add feed", error);
+    }
+  };
+
+  const handleToolkitSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    try {
+      await addToolkitItem(newToolkitItem);
+      setShowToolkitForm(false);
+      setNewToolkitItem({ title: '', description: '', type: 'Prompt', content: '' });
+      const fetched = await getToolkit();
+      if (fetched) setToolkitItems(fetched);
+    } catch (error) {
+      console.error("Failed to add toolkit item", error);
+    }
+  };
+
+  const handleIntelSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    try {
+      await addMarketIntel(newIntel);
+      setShowIntelForm(false);
+      setNewIntel({ region: 'Tri-state', title: '', description: '', coordinates: { lat: 38.4192, lng: -82.4452 } });
+      const fetched = await getMarketIntel();
+      if (fetched) setMarketIntel(fetched);
+    } catch (error) {
+      console.error("Failed to add market intel", error);
+    }
+  };
+
+  const handleSignalAnalyze = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!signalInput.trim()) return;
+    setIsSignalLoading(true);
+    try {
+      const response = await fetch('/api/analyze-signal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signal: signalInput })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSignalAnalysis(data);
+      }
+    } catch (error) {
+      console.error("Failed to analyze signal", error);
+    } finally {
+      setIsSignalLoading(false);
     }
   };
 
@@ -493,7 +903,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen selection:bg-amber-custom selection:text-espresso">
-      <Navbar user={user} onLogin={handleLogin} onLogout={handleLogout} />
+      <Navbar 
+        user={user} 
+        onLogin={handleLogin} 
+        onLogout={handleLogout} 
+        isAdmin={isAdmin} 
+        setShowAdminDashboard={setShowAdminDashboard} 
+      />
 
       <AnimatePresence>
         {showOnboarding && (
@@ -985,70 +1401,178 @@ export default function App() {
                   The <span className="italic font-serif font-medium text-ochre">EntrepAIneur</span> Journal
                 </h2>
               </div>
-              <p className="text-espresso/60 max-w-md text-lg font-light">
-                Deep dives into the intersection of AI, emerging markets, and the future of work.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {[
-                {
-                  title: "Why Voice-First AI is the Key to the Global South",
-                  excerpt: "In markets where literacy and digital literacy vary, voice interfaces are bridging the gap between complexity and utility.",
-                  author: "Dain Russell",
-                  date: "March 20, 2026",
-                  image: "https://picsum.photos/seed/voice-ai/800/500",
-                  tag: "Strategy"
-                },
-                {
-                  title: "The Rise of Agentic AI in Small Business Logistics",
-                  excerpt: "How autonomous agents are handling the 'invisible' work of scheduling, compliance, and inventory for micro-entrepreneurs.",
-                  author: "EntrepAIneur Team",
-                  date: "March 15, 2026",
-                  image: "https://picsum.photos/seed/logistics/800/500",
-                  tag: "Technology"
-                },
-                {
-                  title: "Building for the Informal Economy: A New Playbook",
-                  excerpt: "Traditional SaaS models fail in informal markets. Here's how we're rethinking distribution and monetization.",
-                  author: "Dain Russell",
-                  date: "March 10, 2026",
-                  image: "https://picsum.photos/seed/economy/800/500",
-                  tag: "Insights"
-                }
-              ].map((post, i) => (
-                <motion.div
-                  key={post.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className="group cursor-pointer"
-                >
-                  <div className="relative aspect-[16/10] overflow-hidden rounded-3xl mb-6 shadow-xl">
-                    <img 
-                      src={post.image} 
-                      alt={post.title} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="absolute top-4 left-4">
-                      <span className="bg-white/90 backdrop-blur-sm text-espresso text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border border-black/5">
-                        {post.tag}
-                      </span>
-                    </div>
+              <div className="flex flex-col gap-4">
+                <p className="text-espresso/60 max-w-md text-lg font-light">
+                  Deep dives into the intersection of AI, emerging markets, and the future of work.
+                </p>
+                {isAdmin && (
+                  <div className="flex flex-wrap gap-4">
+                    <button 
+                      onClick={() => setShowPostForm(true)}
+                      className="bg-espresso text-cream px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-ochre transition-colors"
+                    >
+                      <Plus size={14} /> New Journal Entry
+                    </button>
+                    <button 
+                      onClick={() => setShowFeedForm(true)}
+                      className="bg-white border border-espresso/10 text-espresso px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-cream/50 transition-colors"
+                    >
+                      <Plus size={14} /> Add RSS Feed
+                    </button>
+                    <button 
+                      onClick={() => setShowToolkitForm(true)}
+                      className="bg-espresso text-cream px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-ochre transition-colors"
+                    >
+                      <Plus size={14} /> Add Toolkit Resource
+                    </button>
+                    <button 
+                      onClick={() => setShowIntelForm(true)}
+                      className="bg-white border border-espresso/10 text-espresso px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-cream/50 transition-colors"
+                    >
+                      <Plus size={14} /> Add Market Intel
+                    </button>
                   </div>
-                  <p className="text-ochre font-bold text-[10px] uppercase tracking-widest mb-2">{post.date} • {post.author}</p>
-                  <h3 className="font-display text-2xl font-bold mb-3 group-hover:text-ochre transition-colors leading-tight">{post.title}</h3>
-                  <p className="text-espresso/60 text-sm leading-relaxed line-clamp-2">{post.excerpt}</p>
-                </motion.div>
-              ))}
+                )}
+              </div>
             </div>
 
-            <div className="mt-16 text-center">
-              <button className="group border-2 border-espresso px-8 py-3 rounded-full font-bold hover:bg-espresso hover:text-cream transition-all flex items-center gap-2 mx-auto">
-                Read All Insights <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-              </button>
+            {/* Phase 5: Signal to Startup */}
+            <div className="mb-24">
+              <SignalToStartup 
+                onAnalyze={handleSignalAnalyze}
+                isLoading={isSignalLoading}
+                analysis={signalAnalysis}
+              />
+            </div>
+
+            {/* Phase 3: Market Map */}
+            <div className="mb-24">
+              <MarketMap data={marketIntel} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
+              {/* Journal Entries */}
+              <div className="lg:col-span-2 space-y-12">
+                <h3 className="text-xl font-display font-bold uppercase tracking-widest text-ochre/40 border-b border-ochre/10 pb-4 mb-8">Journal Entries</h3>
+                {isInsightsLoading ? (
+                  <div className="flex justify-center py-12">
+                    <Loader2 className="animate-spin text-ochre" size={32} />
+                  </div>
+                ) : posts.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {posts.map((post, i) => (
+                      <motion.article 
+                        key={post.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: i * 0.1 }}
+                        className="group cursor-pointer"
+                        onClick={() => setSelectedPost(post)}
+                      >
+                        <div className="relative aspect-[16/10] overflow-hidden rounded-3xl mb-6 shadow-xl">
+                          <img 
+                            src={post.image || `https://picsum.photos/seed/${post.id}/800/500`} 
+                            alt={post.title} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute top-4 left-4">
+                            <span className="bg-white/90 backdrop-blur-sm text-espresso text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border border-black/5">
+                              {post.tags?.[0] || 'Insights'}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-ochre font-bold text-[10px] uppercase tracking-widest mb-2">
+                          {post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString() : 'Recent'} • {post.author}
+                        </p>
+                        <h3 className="font-display text-2xl font-bold mb-3 group-hover:text-ochre transition-colors leading-tight">{post.title}</h3>
+                        <p className="text-espresso/60 text-sm leading-relaxed line-clamp-2">{post.excerpt}</p>
+                      </motion.article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-12 text-center bg-white/50 rounded-3xl border border-dashed border-espresso/20">
+                    <p className="text-espresso/40 italic">No journal entries yet.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* RSS Feed Sidebar */}
+              <div className="bg-white/50 rounded-[2.5rem] p-8 border border-espresso/5">
+                <h3 className="text-xl font-display font-bold mb-6 flex items-center gap-2">
+                  <Waves className="text-ochre" size={20} /> Market Signals
+                </h3>
+                <div className="space-y-8">
+                  {rssItems.length > 0 ? (
+                    rssItems.map((item, i) => (
+                      <motion.div 
+                        key={i}
+                        initial={{ opacity: 0, x: 20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: i * 0.05 }}
+                        className="group"
+                      >
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">{item.feedName}</span>
+                        <a 
+                          href={item.link} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-sm font-bold text-espresso group-hover:text-ochre transition-colors block mb-2 leading-snug"
+                        >
+                          {item.title}
+                        </a>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-espresso/40 uppercase tracking-widest">
+                            {new Date(item.pubDate).toLocaleDateString()}
+                          </span>
+                          <ExternalLink size={12} className="text-espresso/20 group-hover:text-ochre transition-colors" />
+                        </div>
+                      </motion.div>
+                    ))
+                  ) : (
+                    <p className="text-espresso/40 italic">No signals detected.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Phase 1: Toolkit Section */}
+            <div className="mt-32 pt-24 border-t border-ochre/10">
+              <div className="text-center mb-16">
+                <span className="text-ochre font-mono text-xs tracking-widest uppercase mb-4 block">Founder's Toolkit</span>
+                <h2 className="text-4xl font-display font-bold mb-4">Gated Resources for Subscribed Founders</h2>
+                <p className="text-espresso/60 max-w-2xl mx-auto">Access our curated library of high-value prompts, templates, and market guides.</p>
+              </div>
+
+              {!user ? (
+                <div className="bg-espresso p-12 rounded-[2rem] text-center border border-white/10 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-amber-custom/10 via-transparent to-transparent opacity-50" />
+                  <div className="relative z-10">
+                    <ShieldCheck className="mx-auto text-amber-custom mb-6" size={48} />
+                    <h3 className="text-2xl font-display font-bold text-cream mb-4">Members Only Access</h3>
+                    <p className="text-cream/60 mb-8 max-w-md mx-auto">Log in with your Google account to unlock the full toolkit and exclusive market intelligence.</p>
+                    <button 
+                      onClick={handleLogin}
+                      className="bg-amber-custom text-espresso font-bold px-8 py-4 rounded-full hover:scale-105 transition-all shadow-[0_0_40px_rgba(242,169,0,0.2)]"
+                    >
+                      Login to Unlock
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {toolkitItems.map((item, i) => (
+                    <ToolkitCard key={item.id} item={item} isAdmin={isAdmin} />
+                  ))}
+                  {toolkitItems.length === 0 && (
+                    <div className="col-span-full py-12 text-center text-espresso/40 italic border border-dashed border-ochre/20 rounded-2xl">
+                      No toolkit resources available yet.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -1507,6 +2031,302 @@ export default function App() {
             {isChatOpen ? <X size={28} /> : <MessageSquare size={28} />}
           </motion.button>
         </div>
+
+        {/* New Post Modal */}
+        <AnimatePresence>
+          {showPostForm && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center p-6 bg-espresso/90 backdrop-blur-xl">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white rounded-[2.5rem] p-8 md:p-12 max-w-2xl w-full shadow-2xl overflow-y-auto max-h-[90vh]"
+              >
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="font-display text-3xl font-bold text-espresso">New Journal Entry</h2>
+                  <button onClick={() => setShowPostForm(false)} className="text-espresso/40 hover:text-espresso"><X /></button>
+                </div>
+                <form onSubmit={handlePostSubmit} className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">Title</label>
+                    <input 
+                      required
+                      type="text" 
+                      value={newPost.title}
+                      onChange={(e) => setNewPost(prev => ({ ...prev, title: e.target.value }))}
+                      className="w-full bg-espresso/5 border border-espresso/10 rounded-xl px-4 py-3 text-espresso focus:outline-none focus:border-ochre"
+                      placeholder="The Future of AI in..."
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">Excerpt</label>
+                    <textarea 
+                      required
+                      value={newPost.excerpt}
+                      onChange={(e) => setNewPost(prev => ({ ...prev, excerpt: e.target.value }))}
+                      className="w-full bg-espresso/5 border border-espresso/10 rounded-xl px-4 py-3 text-espresso focus:outline-none focus:border-ochre h-20"
+                      placeholder="A brief summary of the post..."
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">Content (Markdown)</label>
+                    <textarea 
+                      required
+                      value={newPost.content}
+                      onChange={(e) => setNewPost(prev => ({ ...prev, content: e.target.value }))}
+                      className="w-full bg-espresso/5 border border-espresso/10 rounded-xl px-4 py-3 text-espresso focus:outline-none focus:border-ochre h-64 font-mono text-sm"
+                      placeholder="# Your story starts here..."
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">Image URL</label>
+                      <input 
+                        type="text" 
+                        value={newPost.image}
+                        onChange={(e) => setNewPost(prev => ({ ...prev, image: e.target.value }))}
+                        className="w-full bg-espresso/5 border border-espresso/10 rounded-xl px-4 py-3 text-espresso focus:outline-none focus:border-ochre"
+                        placeholder="https://..."
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">Tags (comma separated)</label>
+                      <input 
+                        type="text" 
+                        value={newPost.tags.join(', ')}
+                        onChange={(e) => setNewPost(prev => ({ ...prev, tags: e.target.value.split(',').map(t => t.trim()) }))}
+                        className="w-full bg-espresso/5 border border-espresso/10 rounded-xl px-4 py-3 text-espresso focus:outline-none focus:border-ochre"
+                        placeholder="AI, Strategy, Market"
+                      />
+                    </div>
+                  </div>
+                  <button type="submit" className="w-full bg-ochre text-cream font-bold py-4 rounded-xl hover:bg-espresso transition-colors">
+                    Publish to Journal
+                  </button>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* New Feed Modal */}
+        <AnimatePresence>
+          {showFeedForm && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center p-6 bg-espresso/90 backdrop-blur-xl">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white rounded-[2.5rem] p-8 md:p-12 max-w-md w-full shadow-2xl"
+              >
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="font-display text-3xl font-bold text-espresso">Add RSS Feed</h2>
+                  <button onClick={() => setShowFeedForm(false)} className="text-espresso/40 hover:text-espresso"><X /></button>
+                </div>
+                <form onSubmit={handleFeedSubmit} className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">Feed Name</label>
+                    <input 
+                      required
+                      type="text" 
+                      value={newFeed.name}
+                      onChange={(e) => setNewFeed(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full bg-espresso/5 border border-espresso/10 rounded-xl px-4 py-3 text-espresso focus:outline-none focus:border-ochre"
+                      placeholder="TechCrunch AI"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">RSS URL</label>
+                    <input 
+                      required
+                      type="url" 
+                      value={newFeed.url}
+                      onChange={(e) => setNewFeed(prev => ({ ...prev, url: e.target.value }))}
+                      className="w-full bg-espresso/5 border border-espresso/10 rounded-xl px-4 py-3 text-espresso focus:outline-none focus:border-ochre"
+                      placeholder="https://techcrunch.com/category/artificial-intelligence/feed/"
+                    />
+                  </div>
+                  <button type="submit" className="w-full bg-ochre text-cream font-bold py-4 rounded-xl hover:bg-espresso transition-colors">
+                    Add Feed Source
+                  </button>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Admin Dashboard Modal */}
+        <AnimatePresence>
+          {showAdminDashboard && isAdmin && (
+            <AdminDashboard 
+              waitlist={waitlistEntries} 
+              onClose={() => setShowAdminDashboard(false)} 
+            />
+          )}
+        </AnimatePresence>
+
+        {/* New Toolkit Item Modal */}
+        <AnimatePresence>
+          {showToolkitForm && (
+            <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-espresso/90 backdrop-blur-xl">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white rounded-[2.5rem] p-8 md:p-12 max-w-md w-full shadow-2xl"
+              >
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="font-display text-3xl font-bold text-espresso">Add Toolkit Item</h2>
+                  <button onClick={() => setShowToolkitForm(false)} className="text-espresso/40 hover:text-espresso"><X /></button>
+                </div>
+                <form onSubmit={handleToolkitSubmit} className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">Title</label>
+                    <input 
+                      required
+                      type="text" 
+                      value={newToolkitItem.title}
+                      onChange={(e) => setNewToolkitItem(prev => ({ ...prev, title: e.target.value }))}
+                      className="w-full bg-espresso/5 border border-espresso/10 rounded-xl px-4 py-3 text-espresso focus:outline-none focus:border-ochre"
+                      placeholder="e.g. AI Prompt for Market Research"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">Description</label>
+                    <textarea 
+                      required
+                      value={newToolkitItem.description}
+                      onChange={(e) => setNewToolkitItem(prev => ({ ...prev, description: e.target.value }))}
+                      className="w-full bg-espresso/5 border border-espresso/10 rounded-xl px-4 py-3 text-espresso focus:outline-none focus:border-ochre h-20"
+                      placeholder="What is this resource for?"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">Type</label>
+                    <select 
+                      value={newToolkitItem.type}
+                      onChange={(e) => setNewToolkitItem(prev => ({ ...prev, type: e.target.value }))}
+                      className="w-full bg-espresso/5 border border-espresso/10 rounded-xl px-4 py-3 text-espresso focus:outline-none focus:border-ochre"
+                    >
+                      <option>Prompt</option>
+                      <option>Template</option>
+                      <option>Guide</option>
+                      <option>Case Study</option>
+                    </select>
+                  </div>
+                  <button type="submit" className="w-full bg-ochre text-cream font-bold py-4 rounded-xl hover:bg-espresso transition-colors">
+                    Add Resource
+                  </button>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* New Market Intel Modal */}
+        <AnimatePresence>
+          {showIntelForm && (
+            <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-espresso/90 backdrop-blur-xl">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white rounded-[2.5rem] p-8 md:p-12 max-w-md w-full shadow-2xl"
+              >
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="font-display text-3xl font-bold text-espresso">Add Market Intel</h2>
+                  <button onClick={() => setShowIntelForm(false)} className="text-espresso/40 hover:text-espresso"><X /></button>
+                </div>
+                <form onSubmit={handleIntelSubmit} className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">Region</label>
+                    <select 
+                      value={newIntel.region}
+                      onChange={(e) => setNewIntel(prev => ({ ...prev, region: e.target.value }))}
+                      className="w-full bg-espresso/5 border border-espresso/10 rounded-xl px-4 py-3 text-espresso focus:outline-none focus:border-ochre"
+                    >
+                      <option>Tri-state</option>
+                      <option>Jamaica</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">Title</label>
+                    <input 
+                      required
+                      type="text" 
+                      value={newIntel.title}
+                      onChange={(e) => setNewIntel(prev => ({ ...prev, title: e.target.value }))}
+                      className="w-full bg-espresso/5 border border-espresso/10 rounded-xl px-4 py-3 text-espresso focus:outline-none focus:border-ochre"
+                      placeholder="e.g. New Tech Hub in Huntington"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-ochre mb-2 block">Description</label>
+                    <textarea 
+                      required
+                      value={newIntel.description}
+                      onChange={(e) => setNewIntel(prev => ({ ...prev, description: e.target.value }))}
+                      className="w-full bg-espresso/5 border border-espresso/10 rounded-xl px-4 py-3 text-espresso focus:outline-none focus:border-ochre h-20"
+                      placeholder="Details about the signal..."
+                    />
+                  </div>
+                  <button type="submit" className="w-full bg-ochre text-cream font-bold py-4 rounded-xl hover:bg-espresso transition-colors">
+                    Add Signal
+                  </button>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Full Post Modal */}
+        <AnimatePresence>
+          {selectedPost && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center p-6 bg-espresso/90 backdrop-blur-xl">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-cream rounded-[2.5rem] max-w-4xl w-full shadow-2xl overflow-y-auto max-h-[90vh] text-espresso"
+              >
+                <div className="relative h-64 md:h-96">
+                  <img 
+                    src={selectedPost.image || `https://picsum.photos/seed/${selectedPost.id}/1200/600`} 
+                    alt={selectedPost.title} 
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-cream via-transparent to-transparent" />
+                  <button 
+                    onClick={() => setSelectedPost(null)} 
+                    className="absolute top-6 right-6 bg-white/20 backdrop-blur-md text-white p-2 rounded-full hover:bg-white/40 transition-colors"
+                  >
+                    <X />
+                  </button>
+                </div>
+                <div className="px-8 md:px-16 pb-16 -mt-12 relative z-10">
+                  <div className="flex gap-2 mb-6">
+                    {selectedPost.tags?.map(tag => (
+                      <span key={tag} className="bg-ochre text-cream text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  <h2 className="font-display text-4xl md:text-5xl font-bold mb-6 leading-tight">{selectedPost.title}</h2>
+                  <div className="flex items-center gap-4 mb-12 pb-8 border-b border-espresso/10">
+                    <div className="w-12 h-12 bg-ochre rounded-full flex items-center justify-center text-cream font-bold">
+                      {selectedPost.author[0]}
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">{selectedPost.author}</p>
+                      <p className="text-xs text-espresso/40">
+                        {selectedPost.createdAt?.toDate ? selectedPost.createdAt.toDate().toLocaleDateString() : 'Recent'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="prose prose-espresso max-w-none">
+                    <ReactMarkdown>{selectedPost.content}</ReactMarkdown>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </main>
 
       <footer className="bg-espresso py-12 border-t border-white/5">

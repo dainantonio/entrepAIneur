@@ -3,8 +3,11 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import Parser from "rss-parser";
 
 dotenv.config();
+
+const parser = new Parser();
 
 const SYSTEM_INSTRUCTION = `You are the EntrepAIneur AI assistant — a warm, direct, and knowledgeable guide helping entrepreneurs find the right EntrepAIneur product for their business.
 
@@ -15,13 +18,17 @@ BRAND VOICE:
 - If the user writes in Jamaican Patois, Caribbean Creole, or informal English — match their energy. Don't correct them. Respond naturally in the same register they use.
 - If they write in Spanish, respond in Spanish.
 
+YOUR MARKETS:
+- US Tri-state: Huntington, WV; Southeast Ohio (Portsmouth, Athens, Ironton); Ashland, KY.
+- Jamaica: Kingston, Montego Bay, St. Elizabeth, Mandeville.
+
 YOUR JOB:
 Listen to how the user describes their business, then identify which EntrepAIneur product fits them best and explain why in 1–2 sentences. Then ask one follow-up question to go deeper.
 
 PRODUCTS YOU KNOW:
 1. YardHub — financial operating system for Caribbean informal vendors. Credit scoring, WhatsApp payments, business tracking. Best for: market vendors, food stalls, small traders in Jamaica, Trinidad, Barbados and wider Caribbean.
 2. NotaryOS — agentic AI platform for mobile notary professionals in the US. Job scheduling, document generation, compliance tracking, automated client management. Best for: US-based notary signing agents, mobile notaries, notary business owners.
-3. TrustFix — home services marketplace connecting homeowners with vetted local trades and service professionals. Consumer-first, search-driven. Best for: plumbers, electricians, handymen, cleaners, landscapers — especially in Columbus OH and surrounding areas.
+3. TrustFix — home services marketplace connecting homeowners with vetted local trades and service professionals. Consumer-first, search-driven. Best for: plumbers, electricians, handymen, cleaners, landscapers — especially in Huntington WV, SE Ohio, and Columbus OH.
 4. FarmWise — AI farming intelligence for smallholder farmers. Crop planning, weather data, market pricing in plain language. Best for: Jamaican farmers, smallholders, agricultural cooperatives in the Caribbean.
 5. YardieBiz — WhatsApp AI business assistant for Jamaican food vendors. Daily sales summaries, inventory tracking, customer management — all via WhatsApp chat. Best for: Jamaican food vendors, patty shops, jerk spots, home-based food businesses, diaspora food entrepreneurs.
 6. Signal to Startup — Turn news, policy, and market signals into actionable business opportunities. Advanced AI monitoring of global and local news, policy changes, and market trends. Best for: entrepreneurs looking for their next venture, investors, and business owners seeking to pivot or identify emerging opportunities.
@@ -155,6 +162,53 @@ async function startServer() {
     } catch (error: any) {
       console.error("Explain Product Error:", error);
       res.status(500).json({ error: error.message || "An error occurred explaining product" });
+    }
+  });
+
+  app.get("/api/rss", async (req, res) => {
+    try {
+      const { url } = req.query;
+      if (!url || typeof url !== "string") {
+        return res.status(400).json({ error: "URL is required" });
+      }
+      const feed = await parser.parseURL(url);
+      res.json(feed);
+    } catch (error: any) {
+      console.error("RSS Error:", error);
+      res.status(500).json({ error: "Failed to fetch RSS feed" });
+    }
+  });
+
+  app.post("/api/analyze-signal", async (req, res) => {
+    try {
+      const { signal } = req.body;
+      const ai = getAI();
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Analyze this market signal: "${signal}"
+        Break it down into:
+        1. The Signal: What is actually happening?
+        2. The Opportunity: What business could be built or pivoted based on this?
+        3. The First Step: What should an entrepreneur do today?
+        Focus on the US Tri-state (WV/OH) or Jamaica markets if relevant.`,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              signal: { type: Type.STRING },
+              opportunity: { type: Type.STRING },
+              firstStep: { type: Type.STRING }
+            },
+            required: ["signal", "opportunity", "firstStep"]
+          }
+        }
+      });
+      res.json(JSON.parse(response.text));
+    } catch (error: any) {
+      console.error("Analyze Signal Error:", error);
+      res.status(500).json({ error: error.message || "An error occurred analyzing signal" });
     }
   });
 

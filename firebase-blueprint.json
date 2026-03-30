@@ -117,6 +117,91 @@
         }
       },
       "required": ["title", "content", "excerpt", "author", "createdAt"]
+    },
+    "feeds": {
+      "title": "RSS Feed",
+      "description": "An RSS feed URL to be displayed in the insights section.",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The URL of the RSS feed"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name or category of the feed"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the feed was added"
+        }
+      },
+      "required": ["url", "name", "createdAt"]
+    },
+    "toolkit": {
+      "title": "Toolkit Resource",
+      "description": "A resource for the EntrepAIneur toolkit.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "The title of the resource"
+        },
+        "description": {
+          "type": "string",
+          "description": "A short description of the resource"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["Prompt", "Template", "Guide", "Tool"],
+          "description": "The category of the resource"
+        },
+        "content": {
+          "type": "string",
+          "description": "The actual content or link to the resource"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the resource was added"
+        }
+      },
+      "required": ["title", "description", "type", "content", "createdAt"]
+    },
+    "market_intel": {
+      "title": "Market Intelligence",
+      "description": "Data point for the interactive market map.",
+      "type": "object",
+      "properties": {
+        "region": {
+          "type": "string",
+          "enum": ["Tri-state", "Jamaica"],
+          "description": "The region the intelligence belongs to"
+        },
+        "title": {
+          "type": "string",
+          "description": "The headline of the insight"
+        },
+        "description": {
+          "type": "string",
+          "description": "The detailed insight"
+        },
+        "coordinates": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          },
+          "description": "Geographic coordinates for the map"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the insight was added"
+        }
+      },
+      "required": ["region", "title", "description", "coordinates", "createdAt"]
     }
   },
   "firestore": {
@@ -131,6 +216,18 @@
     "posts": {
       "schema": "posts",
       "description": "Blog posts for entrepreneurial insights"
+    },
+    "feeds": {
+      "schema": "feeds",
+      "description": "Collection of RSS feed URLs"
+    },
+    "toolkit": {
+      "schema": "toolkit",
+      "description": "Gated resources for subscribers"
+    },
+    "market_intel": {
+      "schema": "market_intel",
+      "description": "Data for the interactive market map"
     }
   }
 }

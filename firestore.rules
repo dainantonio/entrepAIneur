@@ -48,6 +48,12 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "dain.russell@gmail.com" && request.auth.token.email_verified == true));
+    }
+
     function isValidEmail(email) {
       return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
     }
@@ -81,9 +87,7 @@ service cloud.firestore {
       allow create: if isValidWaitlistEntry(request.resource.data);
       
       // Only admins can read or manage the waitlist
-      allow read, update, delete: if isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-         (request.auth.token.email == "dain.russell@gmail.com" && request.auth.token.email_verified == true));
+      allow read, update, delete: if isAdmin();
     }
 
     // User profiles
@@ -103,9 +107,25 @@ service cloud.firestore {
     // Blog posts
     match /posts/{postId} {
       allow read: if true; // Publicly readable
-      allow write: if isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-         (request.auth.token.email == "dain.russell@gmail.com" && request.auth.token.email_verified == true));
+      allow write: if isAdmin();
+    }
+
+    // RSS Feeds
+    match /feeds/{feedId} {
+      allow read: if true; // Publicly readable
+      allow write: if isAdmin();
+    }
+
+    // Toolkit Resources
+    match /toolkit/{resourceId} {
+      allow read: if isAuthenticated(); // Gated to logged-in users
+      allow write: if isAdmin();
+    }
+
+    // Market Intelligence
+    match /market_intel/{intelId} {
+      allow read: if true; // Publicly readable for the map
+      allow write: if isAdmin();
     }
   }
 }
