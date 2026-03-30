@@ -779,7 +779,7 @@ export default function App() {
   };
 
   const renderMessageText = (text: string) => {
-    const products = ["YardHub", "NotaryOS", "TrustFix", "FarmWise", "YardieBiz", "Signal to Startup"];
+    const products = ["YardHub", "NotaryOS", "TrustFix", "FarmWise", "YardieBiz", "Signal to Startup", "PivotAI"];
     let parts: (string | any)[] = [text];
 
     products.forEach(product => {
@@ -1291,6 +1291,15 @@ export default function App() {
                   link: "#",
                   icon: "📡", 
                   color: "cyan" 
+                },
+                { 
+                  name: "PivotAI", 
+                  desc: "Turn your experience into AI-ready opportunities.", 
+                  detailedDesc: "PivotAI is the intelligent platform that maps your existing skills to high-growth AI roles and builds your personalized transition path. We help professionals navigate the AI economy by identifying transferable skills and providing a roadmap for upskilling.",
+                  image: "https://picsum.photos/seed/pivot/800/600",
+                  link: "#",
+                  icon: "🚀", 
+                  color: "violet" 
                 }
               ].filter(p => !productFilter || p.name === productFilter).map((product, i) => (
                 <motion.div
